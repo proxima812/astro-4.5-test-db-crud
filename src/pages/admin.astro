@@ -1,7 +1,17 @@
 ---
-import { db, Post } from "astro:db"
+import { eq } from "astro:db"
+import { db, Post, User } from "astro:db"
+
+
 
 const posts = await db.select().from(Post)
+
+
+
+const user = Astro.locals.user
+if (!user) {
+	return Astro.redirect("/signin")
+}
 ---
 
 <html lang="en">
@@ -13,7 +23,7 @@ const posts = await db.select().from(Post)
 		<title>Astro</title>
 	</head>
 	<body class="p-20">
-
+		<a href="/">go back</a>
 		<section class="mb-5 bg-zinc-100">
 			<form id="add-form" class="grid max-w-sm gap-2 p-5">
 				<input
@@ -30,42 +40,55 @@ const posts = await db.select().from(Post)
 				<button type="submit">Add Post</button>
 			</form>
 		</section>
-		<section>
+		<section class="grid grid-cols-3 gap-6">
 			{
 				posts &&
-					posts.map(item => (
-						<article class="mb-5 grid gap-3 bg-slate-100 p-5 max-w-sm">
-							<>
-								<button
-									data-delete
-									class="font-bold underline"
-									data-id={item.id}
-									aria-label={`Delete article: ${item.title}`}
-								>
-									Delete
+					posts.map(post => (
+						<article class="bg-zinc-100 p-3">
+							<div class="grid gap-3">
+								<h2>{post.title}</h2>
+								<p>{post.description}</p>
+								<button data-delete data-id={`${post.id}`}>
+									Удалить пост
 								</button>
-								<h2>{item.title}</h2>
-								<p>{item.description}</p>
-							
-							</>
+							</div>
+							<div class="grid gap-3">
+								<input
+									type="text"
+									value={post.title}
+									id="title"
+									placeholder="Title"
+									class="title-input"
+								/>
+								<textarea
+									id="description"
+									placeholder="Description"
+									class="description-textarea"
+								>
+									{post.description}
+								</textarea>
+								<button data-update data-id={`${post.id}`}>
+									Обновить пост
+								</button>
+							</div>
 						</article>
 					))
 			}
 		</section>
-		<script>
+
+		<script is:inline>
 			// delete article
 			const deleteBtns = document.querySelectorAll("[data-delete]")
 			deleteBtns.forEach(btn => {
 				btn.addEventListener("click", e => {
 					const id = btn.getAttribute("data-id")
 					try {
-						fetch(`/api/${id}.json`, {
+						fetch(`/api/deletePost/${id}.json`, {
 							method: "DELETE",
 							headers: {
 								"Content-Type": "application/json",
 							},
 						})
-						console.log("deleted")
 						btn.closest("article")?.remove()
 					} catch (error) {
 						console.error(error)
@@ -73,52 +96,41 @@ const posts = await db.select().from(Post)
 				})
 			})
 
-			// edit article
-			document.addEventListener("DOMContentLoaded", function () {
-				const editBtns = document.querySelectorAll("[data-edit]")
-				editBtns.forEach(btn => {
-					btn.addEventListener("click", async e => {
-						const id = btn.getAttribute("data-id")
-						const textarea = document.querySelector("#textarea")
-						const description = textarea.value
-						// Переключаем видимость или стиль для редактирования
-						if (btn.textContent === "Edit") {
-							textarea.removeAttribute("readonly")
-							btn.textContent = "Save"
-							textarea.focus()
-						} else {
-							// Обновляем на сервере
-							try {
-								const req = await fetch(`/api/${id}.json`, {
-									method: "PATCH",
-									headers: {
-										"Content-Type": "application/json",
-									},
-									body: JSON.stringify({ description }),
-								})
+			// Update article
+			document.querySelector("[data-update]").addEventListener("click", async e => {
+				const id = e.target.getAttribute("data-id")
+				const title = document.getElementById("title").value
+				const description = document.getElementById("description").value
 
-								const { success, message } = await req.json()
+				if (!id || !title.trim() || !description.trim()) {
+					console.error("All fields are required")
+					return
+				}
 
-								if (success) {
-									console.log("Description updated")
-									// Переключаем обратно после сохранения
-									textarea.setAttribute("readonly", "readonly")
-									btn.textContent = "Edit"
-								} else {
-									throw new Error(message)
-								}
-							} catch (error) {
-								console.error(error)
-								alert("Failed to update description")
-							}
-						}
+				try {
+					const response = await fetch(`/api/updatePost/${id}.json`, {
+						method: "PATCH", // Используйте PATCH или PUT в зависимости от конфигурации вашего API
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({ title, description }),
 					})
-				})
+
+					if (response.ok) {
+						// Обновите DOM или перенаправьте пользователя, если требуется
+						location.reload()
+					} else {
+						throw new Error("Failed to update post")
+					}
+				} catch (error) {
+					console.error(error)
+				}
 			})
 		</script>
 
 		<script>
 			const addForm = document.querySelector("#add-form")
+
 			// form inputs
 			import sanitizeHtml from "sanitize-html"
 			addForm.addEventListener("submit", async e => {
@@ -127,6 +139,7 @@ const posts = await db.select().from(Post)
 					const formData = new FormData(addForm)
 					const title = sanitizeHtml(formData.get("link-title"))
 					const description = sanitizeHtml(formData.get("link-description"))
+
 					if (typeof title === "string" && typeof description === "string") {
 						const req = await fetch("/api/addPost.json", {
 							method: "POST",

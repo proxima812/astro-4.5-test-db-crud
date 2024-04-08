@@ -1,134 +1,68 @@
 ---
 import { db, Post } from "astro:db"
 
-const posts = await db.select().from(Post)
+
+import Layout from "../layouts/Base.astro"
+import LikeCounter from "@/components/like-counter"
+
+import { getCollection } from "astro:content"
+
+const posts = await getCollection("posts")
+
+const postsList = await db.select().from(Post)
+const user = Astro.locals.user
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body class="p-20">
-		<section>
-			{
-				posts &&
-					posts.map(item => (
-						<article class="mb-5 grid gap-3 bg-slate-100 p-5 max-w-sm">
-							<>
-								<h2>{item.title}</h2>
-								<p>{item.description}</p>
-							</>
-						</article>
-					))
-			}
-		</section>
-		<script>
-			// delete article
-			const deleteBtns = document.querySelectorAll("[data-delete]")
-			deleteBtns.forEach(btn => {
-				btn.addEventListener("click", e => {
-					const id = btn.getAttribute("data-id")
-					try {
-						fetch(`/api/${id}.json`, {
-							method: "DELETE",
-							headers: {
-								"Content-Type": "application/json",
-							},
-						})
-						console.log("deleted")
-						btn.closest("article")?.remove()
-					} catch (error) {
-						console.error(error)
-					}
-				})
-			})
+<Layout>
+	<Fragment slot="title">Keystatic + Astro DB</Fragment>
 
-			// edit article
-			document.addEventListener("DOMContentLoaded", function () {
-				const editBtns = document.querySelectorAll("[data-edit]")
-				editBtns.forEach(btn => {
-					btn.addEventListener("click", async e => {
-						const id = btn.getAttribute("data-id")
-						const textarea = document.querySelector("#textarea")
-						const description = textarea.value
-						// Переключаем видимость или стиль для редактирования
-						if (btn.textContent === "Edit") {
-							textarea.removeAttribute("readonly")
-							btn.textContent = "Save"
-							textarea.focus()
-						} else {
-							// Обновляем на сервере
-							try {
-								const req = await fetch(`/api/${id}.json`, {
-									method: "PATCH",
-									headers: {
-										"Content-Type": "application/json",
-									},
-									body: JSON.stringify({ description }),
-								})
+	{
+		user ? (
+			<div class="flex flex-col gap-2">
+				<form method="POST" action="/api/signout">
+					<button class="underline">Sign out</button>
+				</form>
+				<a class="underline" href="/admin">
+					{" "}
+					Go to the admin page
+				</a>
+			</div>
+		) : (
+			<div class="flex flex-col gap-2">
+				<a class="underline" href="/signin">
+					Sign In With Username/Password
+				</a>
+			</div>
+		)
+	}
 
-								const { success, message } = await req.json()
+	<ul class="mt-10 grid gap-2">
+		{
+			posts.map(post => (
+				<li class="list-inside list-disc">
+					<div class="inline-flex items-center gap-2">
+						<a class="hover:underline" href={`/posts/${post.slug}`}>
+							{post.data.title}
+						</a>
+						<LikeCounter slug={post.slug} client:only="react" />
+					</div>
+				</li>
+			))
+		}
+	</ul>
 
-								if (success) {
-									console.log("Description updated")
-									// Переключаем обратно после сохранения
-									textarea.setAttribute("readonly", "readonly")
-									btn.textContent = "Edit"
-								} else {
-									throw new Error(message)
-								}
-							} catch (error) {
-								console.error(error)
-								alert("Failed to update description")
-							}
-						}
-					})
-				})
-			})
-		</script>
+	<section>
+		{
+			postsList &&
+				postsList.map(item => (
+					<article class="mb-5 grid gap-3 bg-slate-100 p-5 max-w-sm">
+						<>
+							<h2>{item.title}</h2>
+							<p>{item.description}</p>
+						</>
+					</article>
+				))
+		}
+	</section>
 
-		<script>
-			const addForm = document.querySelector("#add-form")
-			// form inputs
-			import sanitizeHtml from "sanitize-html"
-			addForm.addEventListener("submit", async e => {
-				e.preventDefault()
-				try {
-					const formData = new FormData(addForm)
-					const title = sanitizeHtml(formData.get("link-title"))
-					const description = sanitizeHtml(formData.get("link-description"))
-					if (typeof title === "string" && typeof description === "string") {
-						const req = await fetch("/api/addPost.json", {
-							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify({
-								title,
-								description,
-							}),
-						})
-
-						const { success, data, message } = await req.json()
-
-						if (success) {
-							addForm.reset()
-							location.reload()
-						} else {
-							throw new Error(message)
-						}
-					}
-				} catch (e) {
-					if (e instanceof Error) {
-						alert(e.message)
-					}
-					console.error(e)
-				}
-			})
-		</script>
-	</body>
-</html>
+</Layout>
